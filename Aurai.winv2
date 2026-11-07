@@ -18,9 +18,41 @@
 ]]
 
 -- ═══════════════════════════════════════════════════════════
--- [0] RAYFIELD GEN2
+-- [0] RAYFIELD — Gen2 with Gen1 fallback (Xeno/free executor safe)
 -- ═══════════════════════════════════════════════════════════
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2", true))()
+local Rayfield
+local _rfOk, _rfErr = pcall(function()
+    Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2", true))()
+end)
+if not _rfOk or not Rayfield then
+    warn("[Aurai] Gen2 failed ("..tostring(_rfErr)..") — falling back to Rayfield v1")
+    local _rfOk2, _rfErr2 = pcall(function()
+        Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield", true))()
+    end)
+    if not _rfOk2 or not Rayfield then
+        warn("[Aurai] Rayfield v1 also failed ("..tostring(_rfErr2)..") — using stub UI")
+        -- Minimal stub so the rest of the script doesn't nil-crash
+        local function _stub() return setmetatable({},{
+            __index=function(t,k) return function(...) return setmetatable({},{__index=function(t2,k2) return function() return nil end end}) end end
+        }) end
+        Rayfield = setmetatable({},{
+            __index=function(t,k)
+                if k=="CreateWindow" then
+                    return function(_,opts)
+                        print("[Aurai-Stub] Window: "..(opts and opts.name or "?"))
+                        return setmetatable({},{__index=function(t2,k2)
+                            if k2=="CreateTab" then return function(_,o) print("[Aurai-Stub] Tab: "..(o and o.name or "?")); return _stub() end end
+                            if k2=="Navigate" then return function() end end
+                            if k2=="Notify" then return function(_,o) print("[Aurai-Stub] Notify: "..(o and o.content or "")) end end
+                            return function() return nil end
+                        end})
+                    end
+                end
+                return function() return nil end
+            end
+        })
+    end
+end
 
 -- ═══════════════════════════════════════════════════════════
 -- [1] SERVICES
