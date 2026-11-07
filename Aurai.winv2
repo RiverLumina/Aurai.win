@@ -18,40 +18,74 @@
 ]]
 
 -- ═══════════════════════════════════════════════════════════
--- [0] RAYFIELD — Gen2 with Gen1 fallback (Xeno/free executor safe)
+-- [0] RAYFIELD — Xeno/free-executor safe loader
+--     Uses request() instead of HttpGet to avoid CoreGui crash
+--     Chain: Gen2 → v1 → stub (all features still work headless)
 -- ═══════════════════════════════════════════════════════════
-local Rayfield
-local _rfOk, _rfErr = pcall(function()
-    Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2", true))()
-end)
-if not _rfOk or not Rayfield then
-    warn("[Aurai] Gen2 failed ("..tostring(_rfErr)..") — falling back to Rayfield v1")
-    local _rfOk2, _rfErr2 = pcall(function()
-        Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield", true))()
-    end)
-    if not _rfOk2 or not Rayfield then
-        warn("[Aurai] Rayfield v1 also failed ("..tostring(_rfErr2)..") — using stub UI")
-        -- Minimal stub so the rest of the script doesn't nil-crash
-        local function _stub() return setmetatable({},{
-            __index=function(t,k) return function(...) return setmetatable({},{__index=function(t2,k2) return function() return nil end end}) end end
-        }) end
-        Rayfield = setmetatable({},{
-            __index=function(t,k)
-                if k=="CreateWindow" then
-                    return function(_,opts)
-                        print("[Aurai-Stub] Window: "..(opts and opts.name or "?"))
-                        return setmetatable({},{__index=function(t2,k2)
-                            if k2=="CreateTab" then return function(_,o) print("[Aurai-Stub] Tab: "..(o and o.name or "?")); return _stub() end end
-                            if k2=="Navigate" then return function() end end
-                            if k2=="Notify" then return function(_,o) print("[Aurai-Stub] Notify: "..(o and o.content or "")) end end
-                            return function() return nil end
-                        end})
-                    end
-                end
-                return function() return nil end
-            end
-        })
+
+-- Safe HTTP fetch: tries request() first (Xeno), falls back to HttpGet
+local function _safeGet(url)
+    -- try request() / syn.request (Xeno, Fluxus, Solara style)
+    local reqFn = (typeof(request)=="function" and request)
+               or (typeof(http) == "table" and typeof(http.request)=="function" and http.request)
+               or (typeof(syn)  == "table" and typeof(syn.request) =="function" and syn.request)
+               or nil
+    if reqFn then
+        local ok, res = pcall(reqFn, {Url=url, Method="GET"})
+        if ok and res and res.Body and #res.Body > 0 then
+            return res.Body
+        end
     end
+    -- fallback to HttpGet wrapped in pcall
+    local ok2, body = pcall(function() return game:HttpGet(url, true) end)
+    if ok2 and body and #body > 0 then return body end
+    return nil
+end
+
+-- Stub UI — used when ALL loaders fail; cheat features still run headless
+local function _makeStub()
+    local function _node()
+        return setmetatable({}, {__index = function(_, k)
+            return function(...) return _node() end
+        end})
+    end
+    local win = setmetatable({}, {__index = function(_, k)
+        if k == "CreateTab"  then return function(_, o) print("[Aurai-Stub] Tab: "..(o and o.name or "?")); return _node() end end
+        if k == "Navigate"   then return function() end end
+        if k == "Notify"     then return function(_, o) print("[Aurai-Stub] Notify: "..(o and o.content or "")) end end
+        return function(...) return _node() end
+    end})
+    return setmetatable({}, {__index = function(_, k)
+        if k == "CreateWindow" then
+            return function(_, opts)
+                print("[Aurai-Stub] Window: "..(opts and opts.name or "?").." (no GUI — executor too limited)")
+                return win
+            end
+        end
+        return function(...) return _node() end
+    end})
+end
+
+local Rayfield
+-- 1) Try Gen2
+local src1 = _safeGet("https://sirius.menu/gen2")
+if src1 then
+    local ok, res = pcall(loadstring(src1))
+    if ok and res then Rayfield = res; print("[Aurai] Rayfield Gen2 loaded ✓") end
+end
+-- 2) Try v1
+if not Rayfield then
+    warn("[Aurai] Gen2 failed — trying Rayfield v1")
+    local src2 = _safeGet("https://sirius.menu/rayfield")
+    if src2 then
+        local ok2, res2 = pcall(loadstring(src2))
+        if ok2 and res2 then Rayfield = res2; print("[Aurai] Rayfield v1 loaded ✓") end
+    end
+end
+-- 3) Stub
+if not Rayfield then
+    warn("[Aurai] All UI loaders failed — running headless (stub mode). All cheat features active.")
+    Rayfield = _makeStub()
 end
 
 -- ═══════════════════════════════════════════════════════════
