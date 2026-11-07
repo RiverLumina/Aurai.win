@@ -327,8 +327,14 @@ local function cPush(kind,msg)
     if ConTab then
         local tag = kind=="ok" and "[OK]  " or kind=="fail" and "[ERR] " or kind=="warn" and "[WRN] " or "[INF] "
         local lbl = ConTab:CreateLabel({text=tag..line})
-        table.insert(ConLbls,lbl)
-        if #ConLbls>80 then pcall(function() ConLbls[1]:Remove() end); table.remove(ConLbls,1) end
+        if lbl then  -- FIX: Rayfield Gen2 can return nil on some executors
+            table.insert(ConLbls,lbl)
+            if #ConLbls>80 then
+                local old = ConLbls[1]
+                if old then pcall(function() old:Remove() end) end  -- FIX: nil guard before :Remove()
+                table.remove(ConLbls,1)
+            end
+        end
     end
     if kind=="fail" then warn("[Aurai] "..line) else print("[Aurai] "..line) end
 end
@@ -341,7 +347,8 @@ local function flushConsole()
     ConTab:CreateSection({name="Boot Log"})
     for _,l in ipairs(ConBuf) do
         local tag=l.kind=="ok" and "[OK]  " or l.kind=="fail" and "[ERR] " or l.kind=="warn" and "[WRN] " or "[INF] "
-        table.insert(ConLbls, ConTab:CreateLabel({text=tag..l.text}))
+        local lbl = ConTab:CreateLabel({text=tag..l.text})
+        if lbl then table.insert(ConLbls, lbl) end  -- FIX: nil guard on flush
     end
     ConTab:CreateSection({name="Live Log"})
 end
@@ -816,7 +823,7 @@ if HAS_HOOKMETHOD then
             end
             -- BUG #5 FIX: intercept ShootGun FireServer to spawn bullet tracer
             if Flags.BulletTracers and method=="FireServer" then
-                local evName = pcall(function() return self.Name end) and self.Name or ""
+                local _ok, evName = pcall(function() return self.Name end); evName = (_ok and evName) or ""
                 if evName=="MainEvent" or evName=="MAINEVENT" then
                     local shootArg = args[2]
                     if shootArg=="ShootGun" or shootArg=="Shoot" then
@@ -1349,7 +1356,8 @@ local function doNetworkDesync()
     if not Flags.NetDesync then return end
     local char=LP.Character; if not (char and char:FindFirstChild("HumanoidRootPart")) then return end
     local hrp=char.HumanoidRootPart
-    if Flags.NetDesyncWalk and LP.Character.Humanoid.MoveDirection.Magnitude==0 then return end
+    local hum_nd = char:FindFirstChildOfClass("Humanoid")
+    if Flags.NetDesyncWalk and (not hum_nd or hum_nd.MoveDirection.Magnitude==0) then return end
     if tick()-netDesyncPrevTick>=(Flags.NetDesyncAmount/math.pi)/10000 then
         netDesyncSleep=not netDesyncSleep; netDesyncPrevTick=tick()
         pcall(function() if HAS_SETHIDDEN then sethiddenproperty(hrp,"NetworkIsSleeping",netDesyncSleep) end end)
