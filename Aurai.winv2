@@ -67,24 +67,50 @@ local function _makeStub()
 end
 
 local Rayfield
--- 1) Try Gen2
-local src1 = _safeGet("https://sirius.menu/gen2")
-if src1 then
-    local ok, res = pcall(loadstring(src1))
-    if ok and res then Rayfield = res; print("[Aurai] Rayfield Gen2 loaded ✓") end
+
+local function _tryLoad(url, label)
+    local src = _safeGet(url)
+    if not src or #src < 100 then
+        warn("[Aurai] "..label.." — fetch empty/failed")
+        return nil
+    end
+    local chunk, compErr = loadstring(src)
+    if not chunk then
+        warn("[Aurai] "..label.." — compile error: "..tostring(compErr))
+        return nil
+    end
+    local ok, result = pcall(chunk)
+    if not ok then
+        warn("[Aurai] "..label.." — runtime error: "..tostring(result))
+        return nil
+    end
+    -- Rayfield returns itself as the chunk return value
+    if result and typeof(result) == "table" then
+        print("[Aurai] "..label.." loaded ✓")
+        return result
+    end
+    -- some builds return nil but set a global
+    if typeof(getgenv) == "function" and getgenv().Rayfield then
+        print("[Aurai] "..label.." loaded via getgenv ✓")
+        return getgenv().Rayfield
+    end
+    warn("[Aurai] "..label.." — loaded but returned no table")
+    return nil
 end
+
+-- 1) Try Gen2
+Rayfield = _tryLoad("https://sirius.menu/gen2", "Gen2")
 -- 2) Try v1
 if not Rayfield then
-    warn("[Aurai] Gen2 failed — trying Rayfield v1")
-    local src2 = _safeGet("https://sirius.menu/rayfield")
-    if src2 then
-        local ok2, res2 = pcall(loadstring(src2))
-        if ok2 and res2 then Rayfield = res2; print("[Aurai] Rayfield v1 loaded ✓") end
-    end
+    Rayfield = _tryLoad("https://sirius.menu/rayfield", "Rayfield v1")
 end
--- 3) Stub
+-- 3) Try raw GitHub mirror (most compatible, no CDN)
 if not Rayfield then
-    warn("[Aurai] All UI loaders failed — running headless (stub mode). All cheat features active.")
+    Rayfield = _tryLoad("https://raw.githubusercontent.com/shlexware/Rayfield/main/source", "Rayfield GitHub")
+end
+-- 4) Stub — all HvH features still active, just no GUI
+if not Rayfield then
+    warn("[Aurai] All UI loaders failed — HEADLESS mode. Aimbot/ESP/all features still active.")
     Rayfield = _makeStub()
 end
 
