@@ -20,7 +20,7 @@
 -- ═══════════════════════════════════════════════════════════
 -- [0] RAYFIELD GEN2
 -- ═══════════════════════════════════════════════════════════
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2", true))()
 
 -- ═══════════════════════════════════════════════════════════
 -- [1] SERVICES
