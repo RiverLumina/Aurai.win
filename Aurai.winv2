@@ -1,3 +1,8 @@
+-- Xeno injection guard: wait for Roblox CoreGui to finish loading
+-- This prevents "attempt to call a nil value" from early injection
+repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
+task.wait(2) -- extra buffer for CoreGui modules to settle
+
 --[[
   █████╗ ██╗   ██╗██████╗  █████╗ ██╗   ██╗   ██╗    ██╗   ██╗██╗███╗   ██╗
  ██╔══██╗██║   ██║██╔══██╗██╔══██╗██║   ██║   ██║    ██║   ██║██║████╗  ██║
