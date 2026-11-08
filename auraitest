@@ -59,6 +59,8 @@ local Rayfield =
     tryLoad("https://raw.githubusercontent.com/shlexware/Rayfield/main/source","Rayfield GH") or
     (function() warn("[Aurai] HEADLESS mode"); return makeStub() end)()
 
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
+
 -- ═══════════════════════════════════════════════════════════
 -- [1] SERVICES
 -- ═══════════════════════════════════════════════════════════
