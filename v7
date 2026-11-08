@@ -1,0 +1,1118 @@
+--[[
+  █████╗ ██╗   ██╗██████╗  █████╗ ██╗   ██╗   ██╗    ██╗   ██╗██╗███╗   ██╗
+ ██╔══██╗██║   ██║██╔══██╗██╔══██╗██║   ██║   ██║    ██║   ██║██║████╗  ██║
+ ███████║██║   ██║██████╔╝███████║██║   ██║   ██║    ██║   ██║██║██╔██╗ ██║
+ ██╔══██║██║   ██║██╔══██╗██╔══██║██║   ██║   ██║    ╚██╗ ██╔╝██║██║╚██╗██║
+ ██║  ██║╚██████╔╝██║  ██║██║  ██║╚██████╔╝   ███████╗╚████╔╝ ██║██║ ╚████║
+ ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝   ╚══════╝ ╚═══╝  ╚═╝╚═╝  ╚═══╝
+ Aurai.win v7.0 — Universal | Open Aimbot logic base
+]]
+
+-- ═══════════════════════════════════════════════════════════
+-- [0] RAYFIELD GEN2
+-- ═══════════════════════════════════════════════════════════
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
+
+-- ═══════════════════════════════════════════════════════════
+-- [1] SERVICES
+-- ═══════════════════════════════════════════════════════════
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService     = game:GetService("TweenService")
+local Camera           = workspace.CurrentCamera
+local LP               = Players.LocalPlayer
+local Mouse            = LP:GetMouse()
+
+-- ═══════════════════════════════════════════════════════════
+-- [2] EXECUTOR CAPABILITY FLAGS
+-- ═══════════════════════════════════════════════════════════
+local HAS_DRAWING     = typeof(Drawing) == "table" and pcall(function() Drawing.new("Line"):Remove() end)
+local HAS_MOUSEMOVE   = typeof(mousemoverel) == "function"
+local HAS_HOOKMETHOD  = typeof(hookmetamethod) == "function"
+    and typeof(newcclosure) == "function"
+    and typeof(checkcaller) == "function"
+    and typeof(getnamecallmethod) == "function"
+
+local DRAW_FONT = HAS_DRAWING and pcall(function() return Drawing.Fonts.Plex end)
+    and Drawing.Fonts.Plex or (HAS_DRAWING and Drawing.Fonts.Monospace or nil)
+
+-- ═══════════════════════════════════════════════════════════
+-- [3] FLAGS
+-- ═══════════════════════════════════════════════════════════
+local Flags = {
+    -- Aimbot
+    AimEnable      = false,
+    AimMode        = "Camera",    -- Camera / Mouse / Silent
+    AimKey         = "E",         -- hold key
+    AimOnePressMode= false,
+    AimPart        = "Head",
+    AimFOV         = 150,
+    AimFOVCheck    = true,
+    AimSmooth      = false,
+    AimSmoothVal   = 50,
+    AimTeamCheck   = true,
+    AimWallCheck   = false,
+    AimAliveCheck  = true,
+    SilentChance   = 100,
+    -- ESP
+    ESPEnable      = false,
+    ESPBox         = true,
+    ESPName        = true,
+    ESPHealth      = true,
+    ESPDistance    = true,
+    ESPTracer      = false,
+    ESPGlow        = true,
+    ESPTeamColour  = false,
+    ESPThickness   = 1,
+    -- Chams
+    ChamsEnable    = false,
+    ChamsVisible   = true,
+    ChamsWall      = true,
+    -- FOV Visual
+    FOVShow        = true,
+    FOVFilled      = false,
+    FOVThickness   = 1,
+    -- Hit Marker
+    HitMark        = false,
+    HitSound       = false,
+    -- Radar
+    RadarEnable    = false,
+    -- Misc
+    BhopEnable     = false,
+    FullBright     = false,
+    NoFog          = false,
+    SpinBot        = false,
+    SpinSpeed      = 20,
+    -- Colours
+    ColEnemy       = "ff3060",
+    ColTeam        = "30ff80",
+    ColTarget      = "ff8800",
+    ColChamsVis    = "00aaff",
+    ColChamsWall   = "ff2244",
+    ColTracer      = "ff3060",
+    ColFOV         = "ffffff",
+    ColRadar       = "ff3060",
+    ColHitMark     = "ffffff",
+}
+
+-- ═══════════════════════════════════════════════════════════
+-- [4] COLOUR HELPERS
+-- ═══════════════════════════════════════════════════════════
+local function hex(h)
+    h = h:gsub("#","")
+    return Color3.fromRGB(
+        tonumber(h:sub(1,2),16) or 255,
+        tonumber(h:sub(3,4),16) or 255,
+        tonumber(h:sub(5,6),16) or 255
+    )
+end
+local function fc(f) return hex(Flags[f] or "ffffff") end
+local function toHex(c)
+    return string.format("%02x%02x%02x",
+        math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255))
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- [5] CONSOLE BUFFER
+-- ═══════════════════════════════════════════════════════════
+local ConBuf  = {}
+local ConTab  = nil
+local ConLbls = {}
+
+local function cPush(kind, msg)
+    local pre = kind=="ok" and "✓ " or kind=="fail" and "✗ " or kind=="warn" and "⚠ " or "  "
+    local line = pre..tostring(msg)
+    table.insert(ConBuf, {text=line, kind=kind})
+    if #ConBuf > 80 then table.remove(ConBuf,1) end
+    if ConTab then
+        local tag = kind=="ok" and "[OK]  " or kind=="fail" and "[ERR] " or kind=="warn" and "[WRN] " or "[INF] "
+        local lbl = ConTab:CreateLabel({ text=tag..line })
+        table.insert(ConLbls, lbl)
+        if #ConLbls > 80 then
+            pcall(function() ConLbls[1]:Remove() end)
+            table.remove(ConLbls,1)
+        end
+    end
+    if kind=="fail" then warn("[Aurai] "..line) else print("[Aurai] "..line) end
+end
+
+local function cInfo(m) cPush("info",m) end
+local function cOk(m)   cPush("ok",  m) end
+local function cWarn(m) cPush("warn",m) end
+local function cFail(m) cPush("fail",m) end
+
+local function flushConsole()
+    if not ConTab then return end
+    ConTab:CreateSection({ name="Boot Log" })
+    for _, l in ipairs(ConBuf) do
+        local tag = l.kind=="ok" and "[OK]  " or l.kind=="fail" and "[ERR] " or l.kind=="warn" and "[WRN] " or "[INF] "
+        table.insert(ConLbls, ConTab:CreateLabel({ text=tag..l.text }))
+    end
+    ConTab:CreateSection({ name="Live Log" })
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- [6] BOOT CHECKS
+-- ═══════════════════════════════════════════════════════════
+cInfo("Aurai.win v7.0 booting | Game: "..game.Name.." | "..tostring(game.PlaceId))
+cInfo("Player: "..LP.Name)
+
+if HAS_DRAWING then cOk("Drawing API ready, font="..tostring(DRAW_FONT))
+else cFail("Drawing API missing — boxes/tracers disabled, glow still works") end
+
+if HAS_MOUSEMOVE then cOk("mousemoverel available — Mouse mode enabled")
+else cWarn("mousemoverel missing — Mouse aim mode unavailable") end
+
+if HAS_HOOKMETHOD then cOk("hookmetamethod available — Silent mode enabled")
+else cWarn("hookmetamethod missing — Silent aim unavailable") end
+
+-- ═══════════════════════════════════════════════════════════
+-- [7] DRAWING HELPERS (all pcall-guarded)
+-- ═══════════════════════════════════════════════════════════
+local function mkLine(x1,y1,x2,y2,col,th)
+    if not HAS_DRAWING then return nil end
+    local ok,l = pcall(function()
+        local l = Drawing.new("Line")
+        l.From=Vector2.new(x1,y1); l.To=Vector2.new(x2,y2)
+        l.Color=col; l.Thickness=th or 1; l.Visible=true
+        return l
+    end)
+    return ok and l or nil
+end
+
+local function mkTxt(txt,x,y,col,sz,center)
+    if not HAS_DRAWING then return nil end
+    local ok,t = pcall(function()
+        local t = Drawing.new("Text")
+        t.Text=txt; t.Position=Vector2.new(x,y)
+        t.Color=col or Color3.new(1,1,1)
+        t.Size=sz or 13; t.Font=DRAW_FONT
+        t.Outline=true; t.Center=center or false
+        t.Visible=true
+        return t
+    end)
+    return ok and t or nil
+end
+
+local function mkCircle(cx,cy,r,col,th,filled,sides)
+    if not HAS_DRAWING then return nil end
+    local ok,c = pcall(function()
+        local c = Drawing.new("Circle")
+        c.Position=Vector2.new(cx,cy); c.Radius=r
+        c.Color=col; c.Filled=filled or false
+        c.Thickness=th or 1; c.NumSides=sides or 64
+        c.Visible=true
+        return c
+    end)
+    return ok and c or nil
+end
+
+local function mkSquare(x,y,w,h,col,th,filled)
+    if not HAS_DRAWING then return nil end
+    local ok,s = pcall(function()
+        local s = Drawing.new("Square")
+        s.Position=Vector2.new(x,y); s.Size=Vector2.new(w,h)
+        s.Color=col; s.Thickness=th or 1
+        s.Filled=filled or false; s.Visible=true
+        return s
+    end)
+    return ok and s or nil
+end
+
+local function w2s(pos)
+    local v, inV = Camera:WorldToViewportPoint(pos)
+    return Vector2.new(v.X,v.Y), inV, v.Z
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- [8] CHARACTER HELPERS — universal R6/R15
+-- ═══════════════════════════════════════════════════════════
+local function getRoot(char)
+    return char and (
+        char:FindFirstChild("HumanoidRootPart") or
+        char:FindFirstChild("Torso") or
+        char:FindFirstChild("UpperTorso") or
+        char:FindFirstChildOfClass("BasePart")
+    )
+end
+
+local function getHum(char)
+    return char and char:FindFirstChildWhichIsA("Humanoid")
+end
+
+local function getAimPart(char, partName)
+    if not char then return nil end
+    local name = partName or Flags.AimPart
+    -- try exact name first
+    local p = char:FindFirstChild(name)
+    if p and p:IsA("BasePart") then return p end
+    -- fallbacks
+    local fallbacks = {"Head","HumanoidRootPart","UpperTorso","Torso"}
+    for _, fn in ipairs(fallbacks) do
+        local fp = char:FindFirstChild(fn)
+        if fp and fp:IsA("BasePart") then return fp end
+    end
+    return char:FindFirstChildOfClass("BasePart")
+end
+
+local function isEnemy(p)
+    if p == LP then return false end
+    if not Flags.AimTeamCheck then return true end
+    local ok, result = pcall(function()
+        return p.TeamColor ~= LP.TeamColor
+    end)
+    return ok and result or true
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- [9] TARGET VALIDATION (ported from Open Aimbot IsReady)
+-- ═══════════════════════════════════════════════════════════
+local function isReady(char)
+    if not char then return false end
+    local p = Players:GetPlayerFromCharacter(char)
+    if not p or p == LP then return false end
+
+    local hum = getHum(char)
+    if not hum then return false end
+
+    local aimPart = getAimPart(char)
+    if not aimPart then return false end
+
+    local myChar = LP.Character
+    if not myChar then return false end
+    local myRoot = getRoot(myChar)
+    if not myRoot then return false end
+
+    -- Alive check
+    if Flags.AimAliveCheck and hum.Health <= 0 then return false end
+
+    -- God check (insane HP or forcefield)
+    if hum.Health >= 10^36 or myChar:FindFirstChildOfClass("ForceField") then return false end
+
+    -- Team check
+    if Flags.AimTeamCheck then
+        local ok, same = pcall(function() return p.TeamColor == LP.TeamColor end)
+        if ok and same then return false end
+    end
+
+    -- Wall check
+    if Flags.AimWallCheck then
+        local dir = (aimPart.Position - myRoot.Position)
+        local rp = RaycastParams.new()
+        rp.FilterType = Enum.RaycastFilterType.Exclude
+        rp.FilterDescendantsInstances = {myChar}
+        local result = workspace:Raycast(myRoot.Position, dir, rp)
+        if not result or not result.Instance then return false end
+        if not result.Instance:FindFirstAncestor(p.Name) then return false end
+    end
+
+    -- FOV check
+    local vpPos, inV = Camera:WorldToViewportPoint(aimPart.Position)
+    if not inV then return false end
+
+    if Flags.AimFOVCheck then
+        local mousePos = UserInputService:GetMouseLocation()
+        local dx = vpPos.X - mousePos.X
+        local dy = vpPos.Y - mousePos.Y
+        if math.sqrt(dx*dx+dy*dy) > Flags.AimFOV then return false end
+    end
+
+    return true, char, Vector2.new(vpPos.X, vpPos.Y), aimPart.Position, aimPart
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- [10] AIMBOT STATE
+-- ═══════════════════════════════════════════════════════════
+local Aiming    = false
+local Target    = nil   -- character Model
+local AimTween  = nil
+local SavedMouseSensitivity = UserInputService.MouseDeltaSensitivity
+
+local function resetAimbot(keepTarget)
+    Aiming = not keepTarget and false or Aiming
+    if not keepTarget then Target = nil end
+    if AimTween then AimTween:Cancel(); AimTween = nil end
+    UserInputService.MouseDeltaSensitivity = SavedMouseSensitivity
+end
+
+-- ─── KEYBIND INPUT ────────────────────────────────────────
+-- hold E (or configured key) to aim
+local AimKeyEnum = Enum.KeyCode.E   -- default
+
+local function strToKeyEnum(s)
+    if s == "RMB" then return Enum.UserInputType.MouseButton2 end
+    if s == "LMB" then return Enum.UserInputType.MouseButton1 end
+    local ok, v = pcall(function() return Enum.KeyCode[s] end)
+    return ok and v or Enum.KeyCode.E
+end
+
+AimKeyEnum = strToKeyEnum(Flags.AimKey)
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe or UserInputService:GetFocusedTextBox() then return end
+    local matchKey = (input.KeyCode == AimKeyEnum or input.UserInputType == AimKeyEnum)
+    if matchKey and Flags.AimEnable then
+        if Flags.AimOnePressMode then
+            if Aiming then resetAimbot()
+            else Aiming = true end
+        else
+            Aiming = true
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gpe)
+    if gpe then return end
+    local matchKey = (input.KeyCode == AimKeyEnum or input.UserInputType == AimKeyEnum)
+    if matchKey and not Flags.AimOnePressMode then
+        resetAimbot()
+    end
+end)
+
+-- ─── SILENT AIM HOOK ──────────────────────────────────────
+if HAS_HOOKMETHOD then
+    local oldIndex; oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, idx)
+        if not checkcaller() and Flags.AimEnable and Flags.AimMode=="Silent"
+            and Aiming and isReady(Target) then
+            local _, _, vpPos, worldPos, aimPart = isReady(Target)
+            local chance = math.random(1,100) <= Flags.SilentChance
+            if chance and self == Mouse then
+                if idx=="Hit" or idx=="hit" then
+                    return CFrame.new(worldPos)
+                elseif idx=="Target" or idx=="target" then
+                    return aimPart
+                elseif idx=="X" or idx=="x" then
+                    return vpPos and vpPos.X
+                elseif idx=="Y" or idx=="y" then
+                    return vpPos and vpPos.Y
+                end
+            end
+        end
+        return oldIndex(self, idx)
+    end))
+
+    local oldNameCall; oldNameCall = hookmetamethod(game, "__namecall", newcclosure(function(...)
+        local method = getnamecallmethod()
+        local args   = {...}
+        local self   = args[1]
+        if not checkcaller() and Flags.AimEnable and Flags.AimMode=="Silent"
+            and Aiming and isReady(Target)
+            and math.random(1,100) <= Flags.SilentChance then
+            local _, _, vpPos, worldPos, aimPart = isReady(Target)
+            if self == UserInputService and method == "GetMouseLocation" then
+                return Vector2.new(vpPos.X, vpPos.Y)
+            elseif self == workspace and (method=="Raycast" or method=="raycast")
+                and typeof(args[2])=="Vector3" and typeof(args[3])=="Vector3" then
+                local dir = (worldPos - args[2]).Unit * (worldPos - args[2]).Magnitude
+                args[3] = dir
+                return oldNameCall(table.unpack(args))
+            end
+        end
+        return oldNameCall(...)
+    end))
+    cOk("Silent aim hooks installed")
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- [11] GLOW (SelectionBox — always works)
+-- ═══════════════════════════════════════════════════════════
+local glowStore = {}
+
+local function clearGlow(p)
+    local g = glowStore[p]
+    if g then pcall(function() g:Destroy() end) end
+    glowStore[p] = nil
+end
+
+local function applyGlow(p, col)
+    local char = p.Character; if not char then return end
+    if glowStore[p] then
+        if not glowStore[p].Parent then
+            pcall(function() glowStore[p]:Destroy() end)
+            glowStore[p] = nil
+        else
+            glowStore[p].Color3 = col
+            glowStore[p].SurfaceColor3 = col
+            return
+        end
+    end
+    local g = Instance.new("SelectionBox")
+    g.Adornee = char; g.Color3 = col
+    g.LineThickness = 0.07; g.SurfaceTransparency = 1
+    g.SurfaceColor3 = col; g.Parent = workspace
+    glowStore[p] = g
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- [12] CHAMS (SelectionBox per limb)
+-- ═══════════════════════════════════════════════════════════
+local chamsStore = {}
+
+local CHAM_PARTS = {
+    "Head","UpperTorso","LowerTorso","Torso",
+    "LeftUpperArm","RightUpperArm","LeftLowerArm","RightLowerArm",
+    "LeftUpperLeg","RightUpperLeg","LeftLowerLeg","RightLowerLeg",
+    "Left Arm","Right Arm","Left Leg","Right Leg",
+}
+
+local function clearChams(p)
+    local d = chamsStore[p]; if not d then return end
+    for _, b in ipairs(d.vis)  do pcall(function() b:Destroy() end) end
+    for _, b in ipairs(d.wall) do pcall(function() b:Destroy() end) end
+    chamsStore[p] = nil
+end
+
+local function applyChams(p)
+    if chamsStore[p] then return end
+    local char = p.Character; if not char then return end
+    local vis = {}; local wall = {}
+    for _, pn in ipairs(CHAM_PARTS) do
+        local part = char:FindFirstChild(pn); if not part then continue end
+        local bv = Instance.new("SelectionBox")
+        bv.Adornee=part; bv.Color3=fc("ColChamsVis")
+        bv.LineThickness=0.04; bv.SurfaceTransparency=0.5
+        bv.SurfaceColor3=fc("ColChamsVis"); bv.Parent=workspace
+        table.insert(vis, bv)
+        local bw = Instance.new("SelectionBox")
+        bw.Adornee=part; bw.Color3=fc("ColChamsWall")
+        bw.LineThickness=0.02; bw.SurfaceTransparency=0.75
+        bw.SurfaceColor3=fc("ColChamsWall"); bw.Parent=workspace
+        table.insert(wall, bw)
+    end
+    chamsStore[p] = {vis=vis, wall=wall}
+end
+
+local function tickChams()
+    for p, d in pairs(chamsStore) do
+        local char = p.Character
+        local hum  = char and getHum(char)
+        local alive = hum and hum.Health > 0
+        for _, b in ipairs(d.vis)  do b.Visible = alive and Flags.ChamsEnable and Flags.ChamsVisible end
+        for _, b in ipairs(d.wall) do b.Visible = alive and Flags.ChamsEnable and Flags.ChamsWall end
+    end
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- [13] ESP (Drawing-based, Open Aimbot style box sizing)
+-- ═══════════════════════════════════════════════════════════
+-- per-player Drawing objects, recreated each frame like Open Aimbot
+local espObjs = {}   -- [player] = {box, name, health, tracer}
+
+local function clearEspPlayer(p)
+    local d = espObjs[p]; if not d then return end
+    for _, v in pairs(d) do
+        if v then pcall(function() v:Remove() end) end
+    end
+    espObjs[p] = nil
+end
+
+local function clearAllEsp()
+    for p, _ in pairs(espObjs) do clearEspPlayer(p) end
+end
+
+-- FOV circle (single persistent object)
+local fovCircle = nil
+
+local function ensureFovCircle()
+    if not HAS_DRAWING then return end
+    if not fovCircle then
+        fovCircle = mkCircle(0,0,Flags.AimFOV,fc("ColFOV"),Flags.FOVThickness,Flags.FOVFilled,64)
+    end
+end
+
+local function updateFovCircle()
+    if not Flags.FOVShow or not Flags.AimEnable then
+        if fovCircle then
+            pcall(function() fovCircle.Visible=false end)
+        end
+        return
+    end
+    ensureFovCircle()
+    if fovCircle then
+        local ml = UserInputService:GetMouseLocation()
+        fovCircle.Position  = Vector2.new(ml.X, ml.Y)
+        fovCircle.Radius    = Flags.AimFOV
+        fovCircle.Color     = fc("ColFOV")
+        fovCircle.Thickness = Flags.FOVThickness
+        fovCircle.Filled    = Flags.FOVFilled
+        fovCircle.Visible   = true
+    end
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- [14] HIT MARKER
+-- ═══════════════════════════════════════════════════════════
+local hitMarkers = {}
+
+local function spawnHitMark(lethal)
+    if not Flags.HitMark or not HAS_DRAWING then return end
+    local cx = Camera.ViewportSize.X/2
+    local cy = Camera.ViewportSize.Y/2
+    local col = lethal and Color3.fromRGB(255,50,50) or fc("ColHitMark")
+    local sz  = lethal and 10 or 7
+    local lines = {}
+    for _, o in ipairs({{-sz,-sz,sz,sz},{sz,-sz,-sz,sz}}) do
+        local l = mkLine(cx+o[1],cy+o[2],cx+o[3],cy+o[4],col,1.5)
+        if l then table.insert(lines,l) end
+    end
+    if Flags.HitSound then
+        pcall(function()
+            local s = Instance.new("Sound")
+            s.SoundId="rbxassetid://264486467"; s.Volume=0.4
+            s.Parent=workspace; s:Play()
+            task.delay(0.3, function() s:Destroy() end)
+        end)
+    end
+    table.insert(hitMarkers, {lines=lines, t=tick()})
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- [15] RADAR
+-- ═══════════════════════════════════════════════════════════
+local radarGui, radarFrame, radarDots = nil,nil,{}
+
+local function buildRadar()
+    if radarGui then return end
+    radarGui = Instance.new("ScreenGui")
+    radarGui.Name="AuraiRadar"; radarGui.ResetOnSpawn=false
+    radarGui.IgnoreGuiInset=true; radarGui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+    radarFrame = Instance.new("Frame")
+    radarFrame.Size=UDim2.new(0,160,0,160)
+    radarFrame.Position=UDim2.new(1,-180,1,-180)
+    radarFrame.BackgroundColor3=Color3.fromRGB(8,8,14)
+    radarFrame.BackgroundTransparency=0.3
+    radarFrame.BorderSizePixel=0; radarFrame.Parent=radarGui
+    Instance.new("UICorner",radarFrame).CornerRadius=UDim.new(0,8)
+    local border=Instance.new("UIStroke")
+    border.Color=fc("ColRadar"); border.Thickness=1.5; border.Parent=radarFrame
+    for _,v in ipairs({{0,0.5,1,0.5},{0.5,0,0.5,1}}) do
+        local l=Instance.new("Frame")
+        l.BackgroundColor3=Color3.new(1,1,1); l.BackgroundTransparency=0.88
+        l.BorderSizePixel=0
+        l.Position=UDim2.new(v[1],0,v[2],0)
+        l.Size=UDim2.new(v[3]-v[1],0,v[4]-v[2],1)
+        l.Parent=radarFrame
+    end
+    local sd=Instance.new("Frame")
+    sd.Size=UDim2.new(0,7,0,7); sd.AnchorPoint=Vector2.new(0.5,0.5)
+    sd.Position=UDim2.new(0.5,0,0.5,0)
+    sd.BackgroundColor3=Color3.fromRGB(80,220,80); sd.BorderSizePixel=0
+    sd.Parent=radarFrame
+    Instance.new("UICorner",sd).CornerRadius=UDim.new(1,0)
+    radarGui.Parent=LP.PlayerGui
+end
+
+local function destroyRadar()
+    if radarGui then radarGui:Destroy(); radarGui=nil; radarFrame=nil; radarDots={} end
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- [16] WORLD MISC
+-- ═══════════════════════════════════════════════════════════
+local origAmbient, origOutdoor, origFogEnd
+
+local function applyFullBright(on)
+    local L = game:GetService("Lighting")
+    if on then
+        origAmbient = origAmbient or L.Ambient
+        origOutdoor = origOutdoor or L.OutdoorAmbient
+        L.Ambient=Color3.new(1,1,1); L.OutdoorAmbient=Color3.new(1,1,1); L.Brightness=2
+    else
+        if origAmbient then L.Ambient=origAmbient end
+        if origOutdoor then L.OutdoorAmbient=origOutdoor end
+        L.Brightness=1
+    end
+end
+
+local function applyNoFog(on)
+    local L = game:GetService("Lighting")
+    if on then origFogEnd=origFogEnd or L.FogEnd; L.FogEnd=100000
+    else if origFogEnd then L.FogEnd=origFogEnd end end
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- [17] BHOP
+-- ═══════════════════════════════════════════════════════════
+UserInputService.JumpRequest:Connect(function()
+    if not Flags.BhopEnable then return end
+    local char=LP.Character; if not char then return end
+    local hum=getHum(char); if not hum then return end
+    if hum:GetState()==Enum.HumanoidStateType.Landed then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════
+-- [18] MAIN RENDER LOOP — ported from Open Aimbot pattern
+-- ═══════════════════════════════════════════════════════════
+RunService.RenderStepped:Connect(function()
+    -- ── Glow / Chams management ───────────────────────────
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LP then continue end
+        if Flags.ESPGlow then
+            local charTarget = Target and Players:GetPlayerFromCharacter(Target)
+            local col = isEnemy(p) and fc("ColEnemy") or fc("ColTeam")
+            if p == charTarget then col = fc("ColTarget") end
+            applyGlow(p, col)
+        else clearGlow(p) end
+
+        if Flags.ChamsEnable then applyChams(p)
+        else clearChams(p) end
+    end
+    tickChams()
+
+    -- ── HitMarker fade ────────────────────────────────────
+    local now = tick()
+    for i = #hitMarkers,1,-1 do
+        local hm = hitMarkers[i]; local age = now-hm.t
+        if age > 0.22 then
+            for _,l in ipairs(hm.lines) do pcall(function() l:Remove() end) end
+            table.remove(hitMarkers,i)
+        else
+            local a = 1-age/0.22
+            for _,l in ipairs(hm.lines) do l.Transparency=1-a end
+        end
+    end
+
+    -- ── FOV Circle ────────────────────────────────────────
+    updateFovCircle()
+
+    -- ── ESP Drawing ───────────────────────────────────────
+    if not Flags.ESPEnable or not HAS_DRAWING then
+        clearAllEsp(); return
+    end
+
+    -- Use Open Aimbot's box sizing formula: 2350/Z for width
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LP then continue end
+        clearEspPlayer(p)
+
+        local char = p.Character; if not char then continue end
+        local hum  = getHum(char)
+        if not hum or hum.Health <= 0 then continue end
+        local hrp  = getRoot(char); if not hrp then continue end
+        local head = char:FindFirstChild("Head") or hrp
+
+        local hrpVP, inV, depth = Camera:WorldToViewportPoint(hrp.Position)
+        if not inV or depth < 0 then continue end
+
+        local headVP    = Camera:WorldToViewportPoint(head.Position)
+        local topVP     = Camera:WorldToViewportPoint(head.Position + Vector3.new(0,0.5,0))
+        local bottomVP  = Camera:WorldToViewportPoint(hrp.Position  - Vector3.new(0,3,0))
+
+        -- Open Aimbot style: width=2350/Z
+        local boxW = 2350 / hrpVP.Z
+        local boxH = math.abs(topVP.Y - bottomVP.Y)
+        local boxX = hrpVP.X - boxW/2
+        local boxY = hrpVP.Y - boxH/2
+
+        -- colour
+        local charTarget = Target and Players:GetPlayerFromCharacter(Target)
+        local isT = p == charTarget
+        local col
+        if Flags.ESPTeamColour then
+            col = pcall(function() return p.TeamColor.Color end) and p.TeamColor.Color or fc("ColEnemy")
+        else
+            col = isEnemy(p) and fc("ColEnemy") or fc("ColTeam")
+            if isT then col = fc("ColTarget") end
+        end
+
+        local d = {}
+        espObjs[p] = d
+
+        -- Box (full square, Open Aimbot style)
+        if Flags.ESPBox then
+            d.box = mkSquare(boxX, boxY, boxW, boxH, col, Flags.ESPThickness, false)
+        end
+
+        -- Name
+        if Flags.ESPName then
+            local lbl = isT and ("🎯 "..p.Name.." 🎯") or ("@"..p.Name)
+            d.name = mkTxt(lbl, hrpVP.X, boxY+boxH-20, col, 13, true)
+        end
+
+        -- Health
+        if Flags.ESPHealth then
+            d.health = mkTxt(
+                string.format("[%.0f%%]", hum.Health/hum.MaxHealth*100),
+                hrpVP.X, headVP.Y-16, col, 12, true
+            )
+        end
+
+        -- Distance
+        if Flags.ESPDistance then
+            local dist = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude)
+            d.dist = mkTxt("["..dist.."m]", hrpVP.X, hrpVP.Y, col, 11, true)
+        end
+
+        -- Tracer
+        if Flags.ESPTracer then
+            d.tracer = mkLine(
+                Camera.ViewportSize.X/2, Camera.ViewportSize.Y,
+                hrpVP.X, boxY,
+                fc("ColTracer"), Flags.ESPThickness
+            )
+        end
+    end
+
+    -- ── Radar ─────────────────────────────────────────────
+    if not Flags.RadarEnable then
+        if radarGui then destroyRadar() end
+    else
+        if not radarGui then buildRadar() end
+        local myHRP = LP.Character and getRoot(LP.Character)
+        if myHRP then
+            local myCF  = myHRP.CFrame
+            local myYaw = math.atan(myCF.LookVector.X, -myCF.LookVector.Z)
+            for p, dot in pairs(radarDots) do
+                if not Players:FindFirstChild(p.Name) then dot:Destroy(); radarDots[p]=nil end
+            end
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p==LP then continue end
+                local char=p.Character; if not char then continue end
+                local hrp=getRoot(char); if not hrp then continue end
+                local hum=getHum(char)
+                if not hum or hum.Health<=0 then
+                    if radarDots[p] then radarDots[p]:Destroy(); radarDots[p]=nil end
+                    continue
+                end
+                local dotCol=isEnemy(p) and fc("ColRadar") or Color3.fromRGB(80,220,80)
+                if not radarDots[p] then
+                    local dot=Instance.new("Frame")
+                    dot.Size=UDim2.new(0,7,0,7); dot.AnchorPoint=Vector2.new(0.5,0.5)
+                    dot.BackgroundColor3=dotCol; dot.BorderSizePixel=0
+                    dot.Parent=radarFrame
+                    Instance.new("UICorner",dot).CornerRadius=UDim.new(1,0)
+                    radarDots[p]=dot
+                end
+                radarDots[p].BackgroundColor3=dotCol
+                local delta=hrp.Position-myHRP.Position
+                local cos=math.cos(-myYaw); local sin=math.sin(-myYaw)
+                local rx=delta.X*cos-delta.Z*sin
+                local rz=delta.X*sin+delta.Z*cos
+                radarDots[p].Position=UDim2.new(
+                    math.clamp(0.5+rx*0.08,0.05,0.95),0,
+                    math.clamp(0.5+rz*0.08,0.05,0.95),0
+                )
+            end
+        end
+    end
+end)
+
+-- LMB hit marker trigger
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        spawnHitMark(false)
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════
+-- [19] AIMBOT LOOP — ported from Open Aimbot's main loop
+-- ═══════════════════════════════════════════════════════════
+RunService.Heartbeat:Connect(function()
+    -- SpinBot
+    if Flags.SpinBot then
+        local char = LP.Character
+        local hrp  = char and getRoot(char)
+        if hrp then
+            hrp.CFrame = hrp.CFrame * CFrame.fromEulerAnglesXYZ(0, math.rad(Flags.SpinSpeed), 0)
+        end
+    end
+
+    if not Flags.AimEnable or not Aiming then
+        if AimTween then AimTween:Cancel(); AimTween=nil end
+        UserInputService.MouseDeltaSensitivity = SavedMouseSensitivity
+        return
+    end
+
+    -- Find closest valid target within FOV (Open Aimbot pattern)
+    if not isReady(Target) then
+        local closest = math.huge
+        Target = nil
+        local mousePos = UserInputService:GetMouseLocation()
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p == LP then continue end
+            local char = p.Character; if not char then continue end
+            local ok, _, vpPos = isReady(char)
+            if ok and vpPos then
+                local dx = vpPos.X - mousePos.X
+                local dy = vpPos.Y - mousePos.Y
+                local mag = math.sqrt(dx*dx+dy*dy)
+                if mag < closest then
+                    closest = mag
+                    Target  = char
+                end
+            end
+        end
+    end
+
+    local ok, _, vpPos, worldPos = isReady(Target)
+    if not ok then
+        resetAimbot(false)
+        return
+    end
+
+    local mode = Flags.AimMode
+
+    if mode == "Camera" then
+        UserInputService.MouseDeltaSensitivity = 0
+        if Flags.AimSmooth then
+            if AimTween then AimTween:Cancel() end
+            AimTween = TweenService:Create(
+                Camera,
+                TweenInfo.new(
+                    math.clamp(Flags.AimSmoothVal,1,99)/100,
+                    Enum.EasingStyle.Sine,
+                    Enum.EasingDirection.Out
+                ),
+                { CFrame = CFrame.new(Camera.CFrame.Position, worldPos) }
+            )
+            AimTween:Play()
+        else
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, worldPos)
+        end
+
+    elseif mode == "Mouse" and HAS_MOUSEMOVE then
+        if AimTween then AimTween:Cancel(); AimTween=nil end
+        UserInputService.MouseDeltaSensitivity = SavedMouseSensitivity
+        local mousePos = UserInputService:GetMouseLocation()
+        local sens = Flags.AimSmooth and math.clamp(Flags.AimSmoothVal,1,99)/10 or 1
+        mousemoverel(
+            (vpPos.X - mousePos.X) / sens,
+            (vpPos.Y - mousePos.Y) / sens
+        )
+
+    elseif mode == "Silent" and HAS_HOOKMETHOD then
+        -- hooks handle everything, just keep target locked
+        UserInputService.MouseDeltaSensitivity = SavedMouseSensitivity
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════
+-- [20] RAYFIELD UI
+-- ═══════════════════════════════════════════════════════════
+local LoadT = tick()
+
+local Window = Rayfield:CreateWindow({
+    name          = "Aurai.win",
+    subtitle      = "v7.0  |  Universal",
+    sidebarLayout = true,
+    theme         = "cobalt",
+    configuration = {
+        autoSave = true,
+        autoLoad = true,
+        fileName = "AuraiWin_v70",
+    },
+})
+
+-- ── AIMBOT TAB ─────────────────────────────────────────────
+local TabAim = Window:CreateTab({ name="Aimbot", icon=93364949241311 })
+
+TabAim:CreateSection({ name="Main" })
+TabAim:CreateToggle({
+    name="Enable Aimbot", flag="AimEnable",
+    currentValue=Flags.AimEnable,
+    callback=function(v)
+        Flags.AimEnable=v
+        if not v then resetAimbot(false) end
+    end
+})
+TabAim:CreateToggle({
+    name="One-Press Mode", flag="AimOnePressMode",
+    currentValue=Flags.AimOnePressMode,
+    callback=function(v) Flags.AimOnePressMode=v end
+})
+
+-- Aim Key dropdown (common keys)
+TabAim:CreateDropdown({
+    name="Aim Key", flag="AimKey",
+    options={"E","Q","F","Z","X","C","V","G","H","T","Y","RMB","LMB"},
+    currentOption={Flags.AimKey},
+    callback=function(v)
+        Flags.AimKey=v
+        AimKeyEnum=strToKeyEnum(v)
+        cOk("Aim key changed to: "..v)
+    end
+})
+
+-- Aim Mode (only show available modes)
+local aimModes = {"Camera"}
+if HAS_MOUSEMOVE then table.insert(aimModes,"Mouse") end
+if HAS_HOOKMETHOD then table.insert(aimModes,"Silent") end
+
+TabAim:CreateDropdown({
+    name="Aim Mode", flag="AimMode",
+    options=aimModes,
+    currentOption={Flags.AimMode},
+    callback=function(v) Flags.AimMode=v; cOk("Aim mode: "..v) end
+})
+
+TabAim:CreateDropdown({
+    name="Aim Part", flag="AimPart",
+    options={"Head","HumanoidRootPart","UpperTorso","Torso","LowerTorso"},
+    currentOption={Flags.AimPart},
+    callback=function(v) Flags.AimPart=v end
+})
+
+TabAim:CreateSection({ name="FOV" })
+TabAim:CreateToggle({ name="FOV Check",   flag="AimFOVCheck",  currentValue=Flags.AimFOVCheck,  callback=function(v) Flags.AimFOVCheck=v end })
+TabAim:CreateSlider({ name="FOV Radius",  flag="AimFOV",       currentValue=Flags.AimFOV,       minValue=10,maxValue=800,decimals=0,suffix=" px", callback=function(v) Flags.AimFOV=v end })
+TabAim:CreateToggle({ name="Show FOV",    flag="FOVShow",       currentValue=Flags.FOVShow,       callback=function(v) Flags.FOVShow=v end })
+TabAim:CreateToggle({ name="FOV Filled",  flag="FOVFilled",     currentValue=Flags.FOVFilled,     callback=function(v) Flags.FOVFilled=v; if fovCircle then fovCircle.Filled=v end end })
+TabAim:CreateSlider({ name="FOV Thickness",flag="FOVThickness", currentValue=Flags.FOVThickness, minValue=1,maxValue=5,decimals=0, callback=function(v) Flags.FOVThickness=v end })
+
+TabAim:CreateSection({ name="Smoothing" })
+TabAim:CreateToggle({ name="Smooth Aim",   flag="AimSmooth",    currentValue=Flags.AimSmooth,    callback=function(v) Flags.AimSmooth=v end })
+TabAim:CreateSlider({ name="Smooth Amount",flag="AimSmoothVal", currentValue=Flags.AimSmoothVal, minValue=1,maxValue=99,decimals=0, callback=function(v) Flags.AimSmoothVal=v end })
+
+TabAim:CreateSection({ name="Checks" })
+TabAim:CreateToggle({ name="Team Check",  flag="AimTeamCheck",  currentValue=Flags.AimTeamCheck,  callback=function(v) Flags.AimTeamCheck=v end })
+TabAim:CreateToggle({ name="Wall Check",  flag="AimWallCheck",  currentValue=Flags.AimWallCheck,  callback=function(v) Flags.AimWallCheck=v end })
+TabAim:CreateToggle({ name="Alive Check", flag="AimAliveCheck", currentValue=Flags.AimAliveCheck, callback=function(v) Flags.AimAliveCheck=v end })
+
+if HAS_HOOKMETHOD then
+    TabAim:CreateSection({ name="Silent Aim" })
+    TabAim:CreateSlider({
+        name="Silent Chance", flag="SilentChance",
+        currentValue=Flags.SilentChance,
+        minValue=1, maxValue=100, decimals=0, suffix="%",
+        callback=function(v) Flags.SilentChance=v end
+    })
+end
+
+-- ── VISUALS TAB ────────────────────────────────────────────
+local TabVis = Window:CreateTab({ name="Visuals", icon=93364949241311 })
+
+TabVis:CreateSection({ name="ESP" })
+TabVis:CreateToggle({ name="Enable ESP",     flag="ESPEnable",   currentValue=Flags.ESPEnable,   callback=function(v) Flags.ESPEnable=v; if not v then clearAllEsp() end end })
+TabVis:CreateToggle({ name="Box",            flag="ESPBox",      currentValue=Flags.ESPBox,      callback=function(v) Flags.ESPBox=v end })
+TabVis:CreateToggle({ name="Name",           flag="ESPName",     currentValue=Flags.ESPName,     callback=function(v) Flags.ESPName=v end })
+TabVis:CreateToggle({ name="Health",         flag="ESPHealth",   currentValue=Flags.ESPHealth,   callback=function(v) Flags.ESPHealth=v end })
+TabVis:CreateToggle({ name="Distance",       flag="ESPDistance", currentValue=Flags.ESPDistance, callback=function(v) Flags.ESPDistance=v end })
+TabVis:CreateToggle({ name="Tracer",         flag="ESPTracer",   currentValue=Flags.ESPTracer,   callback=function(v) Flags.ESPTracer=v end })
+TabVis:CreateToggle({ name="Glow Outline",   flag="ESPGlow",     currentValue=Flags.ESPGlow,     callback=function(v) Flags.ESPGlow=v; if not v then for p,_ in pairs(glowStore) do clearGlow(p) end end end })
+TabVis:CreateToggle({ name="Use Team Color", flag="ESPTeamColour",currentValue=Flags.ESPTeamColour,callback=function(v) Flags.ESPTeamColour=v end })
+TabVis:CreateSlider({ name="ESP Thickness",  flag="ESPThickness",currentValue=Flags.ESPThickness,minValue=1,maxValue=5,decimals=0, callback=function(v) Flags.ESPThickness=v end })
+
+TabVis:CreateSection({ name="Chams" })
+TabVis:CreateToggle({ name="Enable Chams",   flag="ChamsEnable",  currentValue=Flags.ChamsEnable,  callback=function(v) Flags.ChamsEnable=v; if not v then for p,_ in pairs(chamsStore) do clearChams(p) end end end })
+TabVis:CreateToggle({ name="Visible Layer",  flag="ChamsVisible", currentValue=Flags.ChamsVisible, callback=function(v) Flags.ChamsVisible=v end })
+TabVis:CreateToggle({ name="Through-Wall",   flag="ChamsWall",    currentValue=Flags.ChamsWall,    callback=function(v) Flags.ChamsWall=v end })
+
+TabVis:CreateSection({ name="Hit Marker" })
+TabVis:CreateToggle({ name="Hit Marker", flag="HitMark",  currentValue=Flags.HitMark,  callback=function(v) Flags.HitMark=v end })
+TabVis:CreateToggle({ name="Hit Sound",  flag="HitSound", currentValue=Flags.HitSound, callback=function(v) Flags.HitSound=v end })
+
+TabVis:CreateSection({ name="Radar" })
+TabVis:CreateToggle({ name="2D Radar", flag="RadarEnable", currentValue=Flags.RadarEnable, callback=function(v) Flags.RadarEnable=v; if not v then destroyRadar() end end })
+
+-- ── COLORS TAB ─────────────────────────────────────────────
+local TabCol = Window:CreateTab({ name="Colors", icon=93364949241311 })
+TabCol:CreateSection({ name="ESP Colors" })
+local colList = {
+    {"Enemy",   "ColEnemy"},  {"Team",   "ColTeam"},
+    {"Target",  "ColTarget"}, {"Tracer", "ColTracer"},
+    {"FOV",     "ColFOV"},    {"Radar",  "ColRadar"},
+}
+for _, cd in ipairs(colList) do
+    TabCol:CreateColorPicker({
+        name=cd[1], flag=cd[2], color=hex(Flags[cd[2]]),
+        callback=function(c) Flags[cd[2]]=toHex(c) end,
+    })
+end
+TabCol:CreateSection({ name="Chams Colors" })
+TabCol:CreateColorPicker({ name="Visible", flag="ColChamsVis", color=hex(Flags.ColChamsVis),
+    callback=function(c) Flags.ColChamsVis=toHex(c); for p,_ in pairs(chamsStore) do clearChams(p) end end })
+TabCol:CreateColorPicker({ name="Through-Wall", flag="ColChamsWall", color=hex(Flags.ColChamsWall),
+    callback=function(c) Flags.ColChamsWall=toHex(c); for p,_ in pairs(chamsStore) do clearChams(p) end end })
+TabCol:CreateSection({ name="Other" })
+TabCol:CreateColorPicker({ name="Hit Marker", flag="ColHitMark", color=hex(Flags.ColHitMark),
+    callback=function(c) Flags.ColHitMark=toHex(c) end })
+
+-- ── MISC TAB ───────────────────────────────────────────────
+local TabMisc = Window:CreateTab({ name="Misc", icon=93364949241311 })
+TabMisc:CreateSection({ name="Movement" })
+TabMisc:CreateToggle({ name="Bunny Hop", flag="BhopEnable", currentValue=Flags.BhopEnable, callback=function(v) Flags.BhopEnable=v end })
+TabMisc:CreateSection({ name="Bots" })
+TabMisc:CreateToggle({ name="SpinBot", flag="SpinBot", currentValue=Flags.SpinBot, callback=function(v) Flags.SpinBot=v end })
+TabMisc:CreateSlider({ name="Spin Speed", flag="SpinSpeed", currentValue=Flags.SpinSpeed, minValue=1, maxValue=50, decimals=0,
+    callback=function(v) Flags.SpinSpeed=v end })
+TabMisc:CreateSection({ name="World" })
+TabMisc:CreateToggle({ name="Fullbright", flag="FullBright", currentValue=Flags.FullBright, callback=function(v) Flags.FullBright=v; applyFullBright(v) end })
+TabMisc:CreateToggle({ name="No Fog",     flag="NoFog",      currentValue=Flags.NoFog,      callback=function(v) Flags.NoFog=v; applyNoFog(v) end })
+
+-- ── CONSOLE TAB ────────────────────────────────────────────
+ConTab = Window:CreateTab({ name="Console", icon=93364949241311 })
+flushConsole()
+
+ConTab:CreateSection({ name="Status" })
+ConTab:CreateLabel({ text=(HAS_DRAWING  and "✓" or "✗").." Drawing API: "..(HAS_DRAWING and "READY" or "MISSING") })
+ConTab:CreateLabel({ text=(HAS_MOUSEMOVE and "✓" or "✗").." mousemoverel: "..(HAS_MOUSEMOVE and "READY" or "UNAVAILABLE") })
+ConTab:CreateLabel({ text=(HAS_HOOKMETHOD and "✓" or "✗").." hookmetamethod: "..(HAS_HOOKMETHOD and "READY" or "UNAVAILABLE") })
+ConTab:CreateLabel({ text="Aim modes available: "..table.concat(aimModes,", ") })
+
+ConTab:CreateSection({ name="Debug" })
+ConTab:CreateButton({ name="Dump All Players", callback=function()
+    for _, p in ipairs(Players:GetPlayers()) do
+        local char=p.Character; local hum=char and getHum(char)
+        cInfo(p.Name.." | HP:"..(hum and math.floor(hum.Health) or "?").." | Enemy:"..(isEnemy(p) and "YES" or "NO"))
+    end
+    Window:Notify({ title="Console", content="Players dumped to log", duration=2 })
+end })
+ConTab:CreateButton({ name="Force ESP Test Draw", callback=function()
+    if not HAS_DRAWING then cFail("No Drawing API"); return end
+    local ok,t=pcall(function()
+        local t=Drawing.new("Text")
+        t.Text="✓ AURAI ESP OK"; t.Position=Vector2.new(50,50)
+        t.Color=Color3.fromRGB(0,255,80); t.Size=20; t.Font=DRAW_FONT
+        t.Visible=true
+        task.delay(3,function() t:Remove() end)
+        return t
+    end)
+    if ok then cOk("ESP test draw OK — visible 3s")
+    else cFail("Draw failed: "..tostring(t)) end
+end })
+ConTab:CreateButton({ name="Reload Glow", callback=function()
+    for p,_ in pairs(glowStore) do clearGlow(p) end
+    cOk("Glow reloaded")
+    Window:Notify({ title="Console", content="Glow refreshed", duration=2 })
+end })
+ConTab:CreateButton({ name="Reload Chams", callback=function()
+    for p,_ in pairs(chamsStore) do clearChams(p) end
+    cOk("Chams reloaded")
+    Window:Notify({ title="Console", content="Chams refreshed", duration=2 })
+end })
+ConTab:CreateButton({ name="Check Current Target", callback=function()
+    if Target then
+        local p=Players:GetPlayerFromCharacter(Target)
+        cOk("Target: "..(p and p.Name or "Unknown"))
+        Window:Notify({ title="Target", content=p and p.Name or "?", duration=2 })
+    else
+        cInfo("No target")
+        Window:Notify({ title="Target", content="None", duration=2 })
+    end
+end })
+
+-- ── STARTUP ────────────────────────────────────────────────
+Window:Navigate(TabAim)
+
+task.delay(0.5, function()
+    LoadT = math.floor((tick()-LoadT)*1000)
+    Window:Notify({
+        title   = "Aurai.win v7.0",
+        content = string.format(
+            "Loaded %dms | Draw:%s Mouse:%s Silent:%s | Hold [%s] to aim",
+            LoadT,
+            HAS_DRAWING   and "✓" or "✗",
+            HAS_MOUSEMOVE and "✓" or "✗",
+            HAS_HOOKMETHOD and "✓" or "✗",
+            Flags.AimKey
+        ),
+        duration = 7,
+    })
+end)
+
+cOk("v7.0 boot complete")
+print("[Aurai] v7.0 boot complete")
